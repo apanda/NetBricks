@@ -16,5 +16,6 @@ export examples=(
         test/acl-fw
         test/packet_generation
         test/packet_test
+        test/scheduler-test
 )
 

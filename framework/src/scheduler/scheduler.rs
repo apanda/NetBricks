@@ -1,3 +1,4 @@
+use std::cmp;
 use std::default::Default;
 use std::sync::Arc;
 use std::sync::mpsc::{SyncSender, Receiver, sync_channel, RecvError};
@@ -10,6 +11,7 @@ struct Runnable {
     pub task: Box<Executable>,
     pub cycles: u64,
     pub last_run: u64,
+    pub tokens: i64,
 }
 
 impl Runnable {
@@ -18,13 +20,15 @@ impl Runnable {
             task: box task,
             cycles: 0,
             last_run: utils::rdtsc_unsafe(),
+            tokens: 0,
         }
     }
-    pub fn from_boxed_task(task: Box<Executable>) -> Runnable {
+    pub fn from_boxed_task(task: Box<Executable + 'static>) -> Runnable {
         Runnable {
             task: task,
             cycles: 0,
             last_run: utils::rdtsc_unsafe(),
+            tokens: 0,
         }
     }
 }
@@ -41,6 +45,8 @@ pub struct Scheduler {
     execute_loop: bool,
     /// Signal scheduler should shutdown.
     shutdown: bool,
+    /// Scheduler start time.
+    boot_time: u64,
 }
 
 /// Messages that can be sent on the scheduler channel to add or remove tasks.
@@ -77,12 +83,17 @@ impl Scheduler {
             sched_channel: channel,
             execute_loop: false,
             shutdown: true,
+            boot_time: 0,
         }
     }
 
     fn handle_request(&mut self, request: SchedulerCommand) {
         match request {
-            SchedulerCommand::Add(ex) => self.run_q.push(Runnable::from_boxed_task(ex)),
+            SchedulerCommand::Add(mut ex) => { 
+                println!("Scheduler is adding task");
+                ex.execute();
+                self.run_q.push(Runnable::from_boxed_task(ex))
+            },
             SchedulerCommand::Run(f) => f(self),
             SchedulerCommand::Execute => self.execute_loop(),
             SchedulerCommand::Shutdown => {
@@ -121,11 +132,19 @@ impl Scheduler {
     fn execute_internal(&mut self) {
         {
             let task = &mut (&mut self.run_q[self.next_task]);
-            let begin = utils::rdtsc_unsafe();
-            task.task.execute();
-            let end = utils::rdtsc_unsafe();
-            task.cycles += end - begin;
+            let base = cmp::max(self.boot_time, task.last_run);
+            let current_time = utils::rdtsc_unsafe();
+            task.tokens += cmp::max(0, (current_time - base)) as i64;
+            let begin = current_time;
+            let mut end = current_time; 
+            while task.tokens - ((end - begin) as i64) > 0 {
+                task.task.execute();
+                end = utils::rdtsc_unsafe();
+            }
+            let duration = end - begin;
+            task.cycles += duration;
             task.last_run = end;
+            task.tokens -= duration as i64;
         }
         let len = self.run_q.len();
         let next = self.next_task + 1;
@@ -142,6 +161,7 @@ impl Scheduler {
     /// Run the scheduling loop.
     pub fn execute_loop(&mut self) {
         self.execute_loop = true;
+        self.boot_time = utils::rdtsc_unsafe();
         if !self.run_q.is_empty() {
             while self.execute_loop {
                 self.execute_internal()

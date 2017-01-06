@@ -128,6 +128,16 @@ impl NetBricksContext {
         }
     }
 
+    pub fn add_task_to_core<T: FnMut() + Send + Sync + 'static>(&mut self, core: i32, run: Box<T>) -> Result<()> {
+        if let Some(channel) = self.scheduler_channels.get(&core) {
+            channel.send(SchedulerCommand::Add(run)).unwrap();
+            Ok(())
+        } else {
+            Err(ErrorKind::NoRunningSchedulerOnCore(core).into())
+        }
+
+    }
+
     /// Start scheduling pipelines.
     pub fn execute(&mut self) {
         for (core, channel) in &self.scheduler_channels {

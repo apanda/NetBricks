@@ -45,6 +45,10 @@ extern crate error_chain;
 
 #[cfg(unix)]
 extern crate nix;
+extern crate etcdv3_rs;
+extern crate tokio_core;
+extern crate futures;
+
 #[allow(dead_code)]
 mod native;
 pub mod allocators;

@@ -21,5 +21,6 @@ export examples=(
         test/embedded-scheduler-dependency-test
         test/tcp_payload
         test/macswap
+        test/etcd-test
 )
 

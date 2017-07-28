@@ -7,6 +7,8 @@ mod epoll;
 pub mod tcp;
 #[cfg(feature = "sctp")]
 pub mod sctp;
+#[path = "etcd-control.rs"]
+pub mod etcd_control;
 
 use std::os::unix::io::RawFd;
 

@@ -31,24 +31,15 @@ fn subscriber_thread(name: &str, handle: WatcherHandle, s: &mut StandaloneSchedu
     let updated = Arc::new(AtomicBool::new(false));
     let updated_copy = updated.clone();
     let mut current = String::from("");
-    handle.watch_pfx(&pfx, move |w| {
-        if let Some(ref events) = w.events {
-            for event in events {
-                if let &Some(ref t) = event.event_type() {
-                    if *t == EventType::DELETE {
-                        *(val_copy.write().unwrap()) = String::from("");
-                        //*(updated_copy.write().unwrap()) = true;
-                        updated_copy.store(true, Ordering::Release);
-                    }
-                };
-                if let Some(ref kv) = event.kv {
-                    if let Some(ref val) = kv.value() {
-                        *(val_copy.write().unwrap()) = val.clone();
-                        updated_copy.store(true, Ordering::Release);
-                    }
-                }
+    handle.watch_pfx(&pfx, move |triggers| {
+        for trigger in triggers {
+            if trigger.deleted {
+                *(val_copy.write().unwrap()) = String::from("");
+            } else {
+                *(val_copy.write().unwrap()) = String::from_utf8(trigger.value.unwrap()).unwrap();
             }
-        };
+            updated_copy.store(true, Ordering::Release);
+        }
     });
     println!("Started watching");
     s.add_task(move || if updated.load(Ordering::Acquire) {
